@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body>
+<pre id="log">Starting test...</pre>
+<script>
+var log = document.getElementById('log');
+function add(s) { log.textContent += '\n' + s; }
+
+var url = 'https://arch.b4k.dev/_/api/chan/thread/?board=v&num=742878125';
+add('URL: ' + url);
+add('Browser: ' + navigator.userAgent);
+
+var xhr = new XMLHttpRequest();
+xhr.timeout = 15000;
+xhr.open('GET', url, true);
+add('XHR opened');
+
+xhr.onload = function() {
+  add('Status: ' + xhr.status);
+  add('Length: ' + xhr.responseText.length);
+  add('First 100: ' + xhr.responseText.substring(0, 100));
+  add('DONE OK');
+};
+xhr.onerror = function() { add('ERROR: network error'); };
+xhr.ontimeout = function() { add('ERROR: timed out'); };
+xhr.send();
+add('XHR sent (waiting...)');
+</script>
+</body>
+</html>
