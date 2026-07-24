@@ -342,10 +342,31 @@ tr:last-child td { border-bottom: none; }
             idx++;
             setTimeout(fetchNext, 0);
           })
-          .catch(function(err) {
-            alert('Failed to fetch: ' + url + '\n' + err.message);
-            idx++;
-            setTimeout(fetchNext, 0);
+          .catch(function() {
+            // Direct failed, try proxy
+            var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(chanApi);
+            fetch(proxyUrl)
+              .then(function(resp) {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp.json();
+              })
+              .then(function(obj) {
+                var text = '';
+                for (var i = 0; i < obj.posts.length; i++) {
+                  var p = obj.posts[i];
+                  if (p.com) text += stripHtml(p.com) + '\n';
+                }
+                if (text.trim()) {
+                  pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
+                }
+                idx++;
+                setTimeout(fetchNext, 0);
+              })
+              .catch(function(err) {
+                alert('Failed to fetch: ' + url + '\n' + err.message);
+                idx++;
+                setTimeout(fetchNext, 0);
+              });
           });
         return;
       }
@@ -369,38 +390,45 @@ tr:last-child td { border-bottom: none; }
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
           return resp.json();
         })
-        .then(function(obj) {
-          var text = '';
-          var threadKey = Object.keys(obj)[0];
-          var threadData = obj[threadKey];
-
-          // OP post
-          if (threadData.op && threadData.op.comment) {
-            text += stripHtml(threadData.op.comment) + '\n';
-          }
-          // Reply posts
-          var postKeys = Object.keys(threadData.posts);
-          for (var i = 0; i < postKeys.length; i++) {
-            var post = threadData.posts[postKeys[i]];
-            if (post.comment) {
-              text += stripHtml(post.comment) + '\n';
-            }
-          }
-
-          if (text.trim()) {
-            pasteEntries.push({
-              name: '\uD83C\uDF10 ' + url,
-              content: text
+        .then(function(obj) { onFetchDone(obj, url); })
+        .catch(function() {
+          // Direct fetch failed (CORS/blocked), try proxy
+          var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl);
+          fetch(proxyUrl)
+            .then(function(resp) {
+              if (!resp.ok) throw new Error('HTTP ' + resp.status);
+              return resp.json();
+            })
+            .then(function(obj) { onFetchDone(obj, url); })
+            .catch(function(err2) {
+              alert('Failed to fetch: ' + url + '\n' + err2.message);
+              idx++;
+              setTimeout(fetchNext, 0);
             });
-          }
-          idx++;
-          setTimeout(fetchNext, 0);
-        })
-        .catch(function(err) {
-          alert('Failed to fetch: ' + url + '\n' + err.message);
-          idx++;
-          setTimeout(fetchNext, 0);
         });
+    }
+
+    function onFetchDone(obj, url) {
+      var text = '';
+      var threadKey = Object.keys(obj)[0];
+      var threadData = obj[threadKey];
+
+      if (threadData.op && threadData.op.comment) {
+        text += stripHtml(threadData.op.comment) + '\n';
+      }
+      var postKeys = Object.keys(threadData.posts);
+      for (var i = 0; i < postKeys.length; i++) {
+        var post = threadData.posts[postKeys[i]];
+        if (post.comment) {
+          text += stripHtml(post.comment) + '\n';
+        }
+      }
+
+      if (text.trim()) {
+        pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
+      }
+      idx++;
+      setTimeout(fetchNext, 0);
     }
 
     fetchNext();
