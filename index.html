@@ -64,10 +64,19 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
+  <div class="section-title">Fetch archive URL</div>
+  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste foolfuuka thread URLs (arch.b4k.dev, desuarchive, etc.)"></textarea>
+  <div style="display:flex;gap:6px;margin-top:6px">
+    <button class="btn" id="btnFetchUrls" style="background:#ffe0b0">Fetch URLs</button>
+    <span style="font-size:12px;color:#999;align-self:center">Works with any FoolFuuka archive (uses their API)</span>
+  </div>
+</div>
+
+<div class="section">
   <div class="section-title">Paste page source</div>
-  <textarea class="words-area" id="pasteSource" spellcheck="false" style="min-height:60px;height:60px" placeholder="Paste the full HTML source of a web page here, then tap Parse..."></textarea>
+  <textarea class="words-area" id="pasteSource" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste HTML source for non-foolfuuka sites, then tap Parse..."></textarea>
   <div style="display:flex; gap:6px; margin-top:4px">
-    <input type="text" id="pasteUrl" spellcheck="false" style="flex:1; padding:6px 8px; font-size:13px; border:1px solid #ccc; border-radius:3px" placeholder="URL this came from (for correct parsing, optional)">
+    <input type="text" id="pasteUrl" spellcheck="false" style="flex:1; padding:6px 8px; font-size:13px; border:1px solid #ccc; border-radius:3px" placeholder="URL this came from (optional, for site-specific parsing)">
   </div>
   <div style="display:flex;gap:6px;margin-top:6px">
     <button class="btn" id="btnParsePaste" style="background:#ffe0b0">Parse HTML</button>
@@ -174,6 +183,8 @@ tr:last-child td { border-bottom: none; }
   var btnExport = document.getElementById('btnExport');
   var btnTopWords = document.getElementById('btnTopWords');
   var numTopN = document.getElementById('numTopN');
+  var urlsInput = document.getElementById('urlsInput');
+  var btnFetchUrls = document.getElementById('btnFetchUrls');
   var pasteSource = document.getElementById('pasteSource');
   var pasteUrl = document.getElementById('pasteUrl');
   var btnParsePaste = document.getElementById('btnParsePaste');
@@ -338,6 +349,111 @@ tr:last-child td { border-bottom: none; }
     }
     renderFiles();
   });
+
+  // Fetch archive URLs (FoolFuuka API)
+  btnFetchUrls.addEventListener('click', function() {
+    var raw = urlsInput.value;
+    var lines = raw.split('\n');
+    var urls = [];
+    for (var i = 0; i < lines.length; i++) {
+      var u = lines[i].trim();
+      if (u !== '') urls.push(u);
+    }
+    if (urls.length === 0) {
+      alert('Enter at least one URL.');
+      return;
+    }
+
+    btnFetchUrls.disabled = true;
+    btnFetchUrls.textContent = 'Fetching...';
+    var idx = 0;
+
+    function fetchNext() {
+      if (idx >= urls.length) {
+        btnFetchUrls.disabled = false;
+        btnFetchUrls.textContent = 'Fetch URLs';
+        renderFiles();
+        return;
+      }
+
+      var url = urls[idx];
+      progressWrap.classList.add('show');
+      progressText.textContent = 'Fetching: ' + url;
+
+      // Check if already fetched
+      for (var e = 0; e < pasteEntries.length; e++) {
+        if (pasteEntries[e].name === '\uD83C\uDF10 ' + url) {
+          idx++;
+          setTimeout(fetchNext, 0);
+          return;
+        }
+      }
+
+      // Try FoolFuuka API: https?://<host>/<board>/thread/<num>
+      var m = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
+      if (!m) {
+        alert('Not a supported archive URL: ' + url + '\n\nSupported format: https://arch.b4k.dev/v/thread/12345');
+        idx++;
+        setTimeout(fetchNext, 0);
+        return;
+      }
+
+      var apiHost = m[1];
+      var apiBoard = m[2];
+      var apiThread = m[3];
+      var apiUrl = 'https://' + apiHost + '/_/api/chan/thread/?board=' + apiBoard + '&num=' + apiThread;
+
+      fetch(apiUrl)
+        .then(function(resp) {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.json();
+        })
+        .then(function(obj) {
+          var text = '';
+          var threadKey = Object.keys(obj)[0];
+          var threadData = obj[threadKey];
+
+          // OP post
+          if (threadData.op && threadData.op.comment) {
+            text += stripHtml(threadData.op.comment) + '\n';
+          }
+          // Reply posts
+          var postKeys = Object.keys(threadData.posts);
+          for (var i = 0; i < postKeys.length; i++) {
+            var post = threadData.posts[postKeys[i]];
+            if (post.comment) {
+              text += stripHtml(post.comment) + '\n';
+            }
+          }
+
+          if (text.trim()) {
+            pasteEntries.push({
+              name: '\uD83C\uDF10 ' + url,
+              content: text
+            });
+          }
+          idx++;
+          setTimeout(fetchNext, 0);
+        })
+        .catch(function(err) {
+          alert('Failed to fetch: ' + url + '\n' + err.message);
+          idx++;
+          setTimeout(fetchNext, 0);
+        });
+    }
+
+    fetchNext();
+  });
+
+  function stripHtml(html) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    var brs = tmp.querySelectorAll('br');
+    for (var i = 0; i < brs.length; i++) {
+      brs[i].replaceWith('\n');
+    }
+    return tmp.textContent || '';
+  }
 
   // Parse pasted HTML button
   btnParsePaste.addEventListener('click', function() {
