@@ -64,8 +64,8 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
-  <div class="section-title">Fetch thread</div>
-  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste thread URLs (one per line)&#10;arch.b4k.dev, desuarchive, warosu, 4plebs, archived.moe, etc."></textarea>
+  <div class="section-title">Fetch</div>
+  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste URLs (one per line)"></textarea>
   <div style="display:flex;gap:6px;margin-top:6px">
     <button class="btn" id="btnFetchUrls" style="background:#ffe0b0">Fetch URLs</button>
   </div>
@@ -321,7 +321,7 @@ tr:last-child td { border-bottom: none; }
       // Try FoolFuuka API: https?://<host>/<board>/thread/<num>
       var m = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
       if (!m) {
-        alert('Not a supported archive URL: ' + url + '\n\nSupported format: https://arch.b4k.dev/v/thread/12345');
+        alert('Could not fetch: ' + url);
         idx++;
         setTimeout(fetchNext, 0);
         return;
