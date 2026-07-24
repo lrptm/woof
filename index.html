@@ -339,7 +339,7 @@ window.onerror = function(msg, url, line) {
   });
 
   btnFind.addEventListener('click', function() {
-    if (files.length === 0) { alert('Please add at least one file.'); return; }
+    if (files.length === 0 && urlData.length === 0) { alert('Please add at least one file or fetch a URL.'); return; }
     if (!chkCustomWords.checked) { alert("Check 'Custom words' to enter words for Find."); return; }
     var raw = wordsInput.value;
     var words = [];
@@ -407,7 +407,7 @@ window.onerror = function(msg, url, line) {
   btnStop.addEventListener('click', function() { stopRequested = true; });
 
   btnTopWords.addEventListener('click', function() {
-    if (files.length === 0) { alert('Please add at least one file.'); return; }
+    if (files.length === 0 && urlData.length === 0) { alert('Please add at least one file or fetch a URL.'); return; }
     stopRequested = false;
     btnFind.disabled = true; btnTopWords.disabled = true; btnStop.disabled = false; btnExport.disabled = true;
     progressWrap.classList.add('show'); progressFill.style.width = '0%'; progressText.textContent = 'Starting...';
