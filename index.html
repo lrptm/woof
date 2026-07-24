@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>woof - word frequency</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; background: #f5f5f5; color: #222; line-height: 1.4; }
+.container { max-width: 800px; margin: 0 auto; padding: 12px; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #333; }
+.section { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+.section-title { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+.file-area { border: 2px dashed #ccc; border-radius: 4px; padding: 20px; text-align: center; cursor: pointer; background: #fafafa; margin-bottom: 6px; transition: border-color .2s; }
+.file-area.dragover { border-color: #4a90d9; background: #e8f0fe; }
+.file-area input { display: none; }
+.file-area .icon { font-size: 28px; color: #999; }
+.file-area .text { font-size: 13px; color: #777; margin-top: 4px; }
+.file-list { display: none; margin-top: 6px; }
+.file-list.show { display: block; }
+.file-item { font-size: 12px; padding: 3px 8px; background: #eef; border-radius: 3px; margin-bottom: 2px; display: flex; align-items: center; word-break: break-all; }
+.file-item .remove { margin-left: auto; cursor: pointer; color: #c33; font-weight: 700; padding: 0 4px; }
+.words-area { width: 100%; min-height: 90px; padding: 8px; font-size: 13px; font-family: Menlo, Consolas, monospace; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
+.words-area:focus { outline: none; border-color: #4a90d9; }
+.options { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; }
+.options label { font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.options input { margin: 0; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.btn { padding: 8px 18px; font-size: 14px; border: 1px solid #bbb; border-radius: 4px; cursor: pointer; background: #fff; color: #333; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-primary { background: #4a90d9; color: #fff; border-color: #3a7bc8; font-weight: 600; }
+.btn-primary:not(:disabled):active { background: #357abd; }
+.btn-danger { background: #d9534f; color: #fff; border-color: #c9302c; }
+.btn-danger:not(:disabled):active { background: #c9302c; }
+.btn-success { background: #5cb85c; color: #fff; border-color: #4cae4c; }
+.btn-success:not(:disabled):active { background: #449d44; }
+.progress-wrap { margin: 8px 0; display: none; }
+.progress-wrap.show { display: block; }
+.progress-bar { height: 16px; background: #e0e0e0; border-radius: 8px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4a90d9, #357abd); border-radius: 8px; transition: width .15s; }
+.progress-text { font-size: 12px; color: #666; margin-top: 3px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+th { background: #f0f0f0; font-weight: 600; color: #444; position: sticky; top: 0; }
+tr:last-child td { border-bottom: none; }
+.result-wrap { max-height: 350px; overflow-y: auto; }
+.empty-state { text-align: center; padding: 24px; color: #999; font-size: 14px; }
+.csv-btn { margin-top: 8px; }
+@media (-webkit-min-device-pixel-ratio: 2) { body { -webkit-text-size-adjust: 100%; } }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>woof</h1>
+
+<div class="section">
+  <div class="section-title">Files</div>
+  <div class="file-area" id="dropZone">
+    <div class="icon">&#128196;</div>
+    <div class="text">Tap to select files, or drag &amp; drop .txt files here</div>
+    <input type="file" id="fileInput" multiple accept=".txt,text/plain">
+  </div>
+  <div class="file-list" id="fileList"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Words (one per line)</div>
+  <textarea class="words-area" id="wordsInput" spellcheck="false"></textarea>
+</div>
+
+<div class="section">
+  <div class="options">
+    <label><input type="checkbox" id="chkWholeWord" checked> Match whole word only</label>
+    <label><input type="checkbox" id="chkCaseSensitive"> Case sensitive</label>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btnFind">Find...</button>
+    <button class="btn btn-danger" id="btnStop" disabled>Stop</button>
+    <button class="btn btn-success" id="btnExport" disabled>Export CSV</button>
+  </div>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">Ready</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Results</div>
+  <div class="result-wrap" id="resultWrap">
+    <div class="empty-state" id="emptyState">Add some files and words, then tap Find...</div>
+    <table id="resultTable" style="display:none">
+      <thead><tr><th>Word</th><th>Frequency</th></tr></thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var genericWords = [
+    "time","people","world","life","day","work","way","thing","man","woman",
+    "child","hand","eye","place","word","case","point","house","country","number",
+    "group","problem","fact","game","story","end","part","city","state","family",
+    "night","water","food","money","school","power","government","system","business","company",
+    "market","service","student","office","industry","force","capital","technology","science","information",
+    "data","research","health","education","development","knowledge","experience","community","society","culture",
+    "language","history","art","music","film","book","nature","energy","space","earth",
+    "sun","moon","star","ocean","mountain","river","forest","animal","plant","flower",
+    "tree","color","shape","size","direction","distance","length","height","weight","speed",
+    "temperature","pressure","sound","light","heat","mind","heart","body","spirit","dream"
+  ];
+
+  function pickRandom(arr, n) {
+    var copy = arr.slice();
+    var result = [];
+    for (var i = 0; i < n && copy.length > 0; i++) {
+      var idx = Math.floor(Math.random() * copy.length);
+      result.push(copy[idx]);
+      copy.splice(idx, 1);
+    }
+    return result;
+  }
+
+  // Pre-fill with 10 random words
+  document.getElementById('wordsInput').value = pickRandom(genericWords, 10).join('\n');
+
+  // State
+  var files = [];
+  var stopRequested = false;
+
+  // DOM refs
+  var dropZone = document.getElementById('dropZone');
+  var fileInput = document.getElementById('fileInput');
+  var fileList = document.getElementById('fileList');
+  var wordsInput = document.getElementById('wordsInput');
+  var chkWholeWord = document.getElementById('chkWholeWord');
+  var chkCaseSensitive = document.getElementById('chkCaseSensitive');
+  var btnFind = document.getElementById('btnFind');
+  var btnStop = document.getElementById('btnStop');
+  var btnExport = document.getElementById('btnExport');
+  var progressWrap = document.getElementById('progressWrap');
+  var progressFill = document.getElementById('progressFill');
+  var progressText = document.getElementById('progressText');
+  var resultBody = document.getElementById('resultBody');
+  var resultTable = document.getElementById('resultTable');
+  var emptyState = document.getElementById('emptyState');
+
+  // Update file list UI
+  function renderFiles() {
+    if (files.length === 0) {
+      fileList.classList.remove('show');
+      fileList.innerHTML = '';
+      return;
+    }
+    fileList.classList.add('show');
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+      html += '<div class="file-item">' + escapeHtml(files[i].name) + ' <span class="remove" data-idx="' + i + '">&#10005;</span></div>';
+    }
+    fileList.innerHTML = html;
+    // Bind remove buttons
+    var removes = fileList.querySelectorAll('.remove');
+    for (var r = 0; r < removes.length; r++) {
+      removes[r].addEventListener('click', function(e) {
+        var idx = parseInt(e.target.getAttribute('data-idx'), 10);
+        files.splice(idx, 1);
+        renderFiles();
+      });
+    }
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // File input change
+  fileInput.addEventListener('change', function(e) {
+    var selected = e.target.files;
+    for (var i = 0; i < selected.length; i++) {
+      // Deduplicate by name + size + lastModified
+      var dup = false;
+      for (var j = 0; j < files.length; j++) {
+        if (files[j].name === selected[i].name && files[j].size === selected[i].size && files[j].lastModified === selected[i].lastModified) {
+          dup = true;
+          break;
+        }
+      }
+      if (!dup) {
+        files.push(selected[i]);
+      }
+    }
+    renderFiles();
+    // Reset so same file can be selected again
+    fileInput.value = '';
+  });
+
+  // Drop zone click
+  dropZone.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'INPUT') {
+      fileInput.click();
+    }
+  });
+
+  // Drag/drop
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('dragover');
+  });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('dragover');
+    var dropped = e.dataTransfer.files;
+    for (var i = 0; i < dropped.length; i++) {
+      var dup = false;
+      for (var j = 0; j < files.length; j++) {
+        if (files[j].name === dropped[i].name && files[j].size === dropped[i].size && files[j].lastModified === dropped[i].lastModified) {
+          dup = true;
+          break;
+        }
+      }
+      if (!dup) {
+        files.push(dropped[i]);
+      }
+    }
+    renderFiles();
+  });
+
+  // Find button
+  btnFind.addEventListener('click', function() {
+    if (files.length === 0) {
+      alert('Please add at least one file.');
+      return;
+    }
+
+    var raw = wordsInput.value;
+    var words = [];
+    var lines = raw.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var w = lines[i].trim();
+      if (w !== '') {
+        words.push(w);
+      }
+    }
+
+    if (words.length === 0) {
+      alert('Please enter at least one word.');
+      return;
+    }
+
+    stopRequested = false;
+    btnFind.disabled = true;
+    btnStop.disabled = false;
+    btnExport.disabled = true;
+    progressWrap.classList.add('show');
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Starting...';
+
+    var wholeWord = chkWholeWord.checked;
+    var caseSensitive = chkCaseSensitive.checked;
+    var flags = 'g' + (caseSensitive ? '' : 'i');
+
+    var totalSteps = files.length * words.length;
+    var completed = 0;
+    var results = {};
+    for (var wi = 0; wi < words.length; wi++) {
+      results[words[wi]] = 0;
+    }
+
+    // Process files sequentially
+    var fileIdx = 0;
+    var wordIdx = 0;
+
+    function processNext() {
+      if (stopRequested) {
+        finish(true);
+        return;
+      }
+
+      if (fileIdx >= files.length) {
+        finish(false);
+        return;
+      }
+
+      var file = files[fileIdx];
+      var word = words[wordIdx];
+
+      progressText.textContent = 'Processing: ' + file.name + ' - \u2018' + word + '\u2019 (' + (completed) + ' / ' + totalSteps + ')';
+
+      var reader = new FileReader();
+
+      reader.onload = function(e) {
+        var content = e.target.result;
+
+        var pattern;
+        var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (wholeWord) {
+          pattern = '\\b' + escaped + '\\b';
+        } else {
+          pattern = escaped;
+        }
+
+        try {
+          var regex = new RegExp(pattern, flags);
+          var match;
+          var count = 0;
+          while ((match = regex.exec(content)) !== null) {
+            count++;
+            // Prevent infinite loops on zero-length matches
+            if (match.index === regex.lastIndex) {
+              regex.lastIndex++;
+            }
+          }
+          results[word] += count;
+        } catch (err) {
+          // Invalid regex (shouldn't happen since we escape)
+        }
+
+        completed++;
+        var pct = Math.min(100, (completed / totalSteps) * 100);
+        progressFill.style.width = pct.toFixed(1) + '%';
+        progressText.textContent = 'Processing: ' + file.name + ' - \u2018' + word + '\u2019 (' + completed + ' / ' + totalSteps + ')';
+
+        // Next iteration
+        wordIdx++;
+        if (wordIdx >= words.length) {
+          wordIdx = 0;
+          fileIdx++;
+        }
+
+        // Use setTimeout to yield to UI
+        setTimeout(processNext, 0);
+      };
+
+      reader.onerror = function() {
+        completed++;
+        wordIdx++;
+        if (wordIdx >= words.length) {
+          wordIdx = 0;
+          fileIdx++;
+        }
+        setTimeout(processNext, 0);
+      };
+
+      reader.readAsText(file);
+    }
+
+    function finish(stopped) {
+      // Render results
+      resultBody.innerHTML = '';
+      for (var i = 0; i < words.length; i++) {
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td');
+        td1.textContent = words[i];
+        var td2 = document.createElement('td');
+        td2.textContent = results[words[i]];
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        resultBody.appendChild(tr);
+      }
+      resultTable.style.display = '';
+      emptyState.style.display = 'none';
+
+      var label = stopped ? 'Stopped early' : 'Done';
+      progressText.textContent = label + ' \u2014 ' + words.length + ' words across ' + files.length + ' files';
+
+      btnFind.disabled = false;
+      btnStop.disabled = true;
+      btnExport.disabled = false;
+    }
+
+    processNext();
+  });
+
+  // Stop button
+  btnStop.addEventListener('click', function() {
+    stopRequested = true;
+  });
+
+  // Export CSV
+  btnExport.addEventListener('click', function() {
+    var rows = resultBody.querySelectorAll('tr');
+    if (rows.length === 0) {
+      alert('No results to export.');
+      return;
+    }
+    var csv = 'word,freq\n';
+    for (var i = 0; i < rows.length; i++) {
+      var cells = rows[i].querySelectorAll('td');
+      if (cells.length >= 2) {
+        var w = cells[0].textContent;
+        var f = cells[1].textContent;
+        csv += w + ',' + f + '\n';
+      }
+    }
+    download(csv, 'word_frequencies.csv', 'text/csv');
+  });
+
+  function download(content, filename, mime) {
+    var bom = '\uFEFF';
+    var blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+})();
+</script>
+</body>
+</html>
