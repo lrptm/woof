@@ -118,6 +118,11 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <script>
+window.onerror = function(msg, url, line) {
+  document.getElementById('progressText').textContent = 'JS ERROR: ' + msg + ' (line ' + line + ')';
+  document.getElementById('progressWrap').style.display = 'block';
+  return false;
+};
 (function() {
   'use strict';
 
@@ -232,11 +237,14 @@ tr:last-child td { border-bottom: none; }
   });
 
   btnFetchUrls.addEventListener('click', function() {
-    var lines = urlsInput.value.split('\n');
+    var raw = urlsInput.value;
+    var lines = raw.split('\n');
     var urls = [];
     for (var i = 0; i < lines.length; i++) { var u = lines[i].trim(); if (u) urls.push(u); }
     if (urls.length === 0) { alert('Enter at least one URL.'); return; }
 
+    progressWrap.classList.add('show');
+    progressText.textContent = 'Fetching...';
     btnFetchUrls.disabled = true;
     btnFetchUrls.textContent = 'Fetching...';
     var idx = 0;
@@ -245,11 +253,11 @@ tr:last-child td { border-bottom: none; }
       if (idx >= urls.length) {
         btnFetchUrls.disabled = false;
         btnFetchUrls.textContent = 'Fetch URLs';
+        progressText.textContent = 'Done fetching ' + urls.length + ' URL(s)';
         renderFiles();
         return;
       }
       var url = urls[idx];
-      progressWrap.classList.add('show');
       progressText.textContent = 'Fetching: ' + url;
 
       for (var e = 0; e < urlData.length; e++) {
