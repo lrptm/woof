@@ -64,23 +64,10 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
-  <div class="section-title">Fetch archive URL</div>
-  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste foolfuuka thread URLs (arch.b4k.dev, desuarchive, etc.)"></textarea>
+  <div class="section-title">Fetch thread</div>
+  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste thread URLs (one per line)&#10;arch.b4k.dev, desuarchive, warosu, 4plebs, archived.moe, etc."></textarea>
   <div style="display:flex;gap:6px;margin-top:6px">
     <button class="btn" id="btnFetchUrls" style="background:#ffe0b0">Fetch URLs</button>
-    <span style="font-size:12px;color:#999;align-self:center">Works with any FoolFuuka archive (uses their API)</span>
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-title">Paste page source</div>
-  <textarea class="words-area" id="pasteSource" spellcheck="false" style="min-height:50px;height:50px" placeholder="Paste HTML source for non-foolfuuka sites, then tap Parse..."></textarea>
-  <div style="display:flex; gap:6px; margin-top:4px">
-    <input type="text" id="pasteUrl" spellcheck="false" style="flex:1; padding:6px 8px; font-size:13px; border:1px solid #ccc; border-radius:3px" placeholder="URL this came from (optional, for site-specific parsing)">
-  </div>
-  <div style="display:flex;gap:6px;margin-top:6px">
-    <button class="btn" id="btnParsePaste" style="background:#ffe0b0">Parse HTML</button>
-    <span style="font-size:12px;color:#999;align-self:center">Tip: Save page as .html and drag into Files above</span>
   </div>
 </div>
 
@@ -185,9 +172,6 @@ tr:last-child td { border-bottom: none; }
   var numTopN = document.getElementById('numTopN');
   var urlsInput = document.getElementById('urlsInput');
   var btnFetchUrls = document.getElementById('btnFetchUrls');
-  var pasteSource = document.getElementById('pasteSource');
-  var pasteUrl = document.getElementById('pasteUrl');
-  var btnParsePaste = document.getElementById('btnParsePaste');
   var progressWrap = document.getElementById('progressWrap');
   var progressFill = document.getElementById('progressFill');
   var progressText = document.getElementById('progressText');
@@ -230,61 +214,6 @@ tr:last-child td { border-bottom: none; }
         renderFiles();
       });
     }
-  }
-
-  function extractTextFromHtml(html, url) {
-    var doc;
-    try {
-      doc = new DOMParser().parseFromString(html, 'text/html');
-    } catch(e) {
-      return '';
-    }
-
-    // Remove non-content elements
-    var removals = doc.querySelectorAll('script, style, nav, footer, header, aside, noscript');
-    for (var i = 0; i < removals.length; i++) {
-      removals[i].remove();
-    }
-
-    var text = '';
-
-    if (url.indexOf('arch.b4k.dev') !== -1) {
-      var posts = doc.querySelectorAll('article.post div.text, article.thread div.text');
-      for (var i = 0; i < posts.length; i++) {
-        var brs = posts[i].querySelectorAll('br');
-        for (var j = 0; j < brs.length; j++) {
-          brs[j].replaceWith('\n');
-        }
-        text += posts[i].textContent + '\n';
-      }
-    } else if (url.indexOf('4chan.org') !== -1 || url.indexOf('4channel.org') !== -1) {
-      var posts = doc.querySelectorAll('blockquote.postMessage');
-      for (var i = 0; i < posts.length; i++) {
-        var block = posts[i];
-        var brs = block.querySelectorAll('br');
-        for (var j = 0; j < brs.length; j++) {
-          brs[j].replaceWith('\n');
-        }
-        text += block.textContent + '\n';
-      }
-    } else if (url.indexOf('nitter.net') !== -1 || url.indexOf('xcancel.com') !== -1) {
-      var tweets = doc.querySelectorAll('.tweet-content, [class*="tweet-body"]');
-      for (var i = 0; i < tweets.length; i++) {
-        text += tweets[i].textContent + '\n';
-      }
-    } else {
-      var body = doc.body;
-      if (body) {
-        var brs = body.querySelectorAll('br');
-        for (var j = 0; j < brs.length; j++) {
-          brs[j].replaceWith('\n');
-        }
-        text = body.textContent || '';
-        text = text.replace(/^\s+/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-      }
-    }
-
-    return text;
   }
 
   function escapeHtml(str) {
@@ -454,30 +383,6 @@ tr:last-child td { border-bottom: none; }
     }
     return tmp.textContent || '';
   }
-
-  // Parse pasted HTML button
-  btnParsePaste.addEventListener('click', function() {
-    var raw = pasteSource.value.trim();
-    if (raw === '') {
-      alert('Paste the HTML source of a web page first.');
-      return;
-    }
-
-    var sourceUrl = pasteUrl.value.trim() || '';
-    var label = sourceUrl ? '\uD83C\uDF10 ' + sourceUrl : 'Paste ' + (pasteEntries.length + 1);
-    var text = extractTextFromHtml(raw, sourceUrl);
-    if (text.trim()) {
-      pasteEntries.push({
-        name: label,
-        content: text
-      });
-      pasteSource.value = '';
-      pasteUrl.value = '';
-      renderFiles();
-    } else {
-      alert('No text could be extracted. Make sure you pasted the full HTML page source.');
-    }
-  });
 
   // Custom words checkbox toggle
   chkCustomWords.addEventListener('change', function() {
