@@ -233,7 +233,16 @@ tr:last-child td { border-bottom: none; }
 
     var text = '';
 
-    if (url.indexOf('4chan.org') !== -1 || url.indexOf('4channel.org') !== -1) {
+    if (url.indexOf('arch.b4k.dev') !== -1) {
+      var posts = doc.querySelectorAll('article.post div.text, article.thread div.text');
+      for (var i = 0; i < posts.length; i++) {
+        var brs = posts[i].querySelectorAll('br');
+        for (var j = 0; j < brs.length; j++) {
+          brs[j].replaceWith('\n');
+        }
+        text += posts[i].textContent + '\n';
+      }
+    } else if (url.indexOf('4chan.org') !== -1 || url.indexOf('4channel.org') !== -1) {
       var posts = doc.querySelectorAll('blockquote.postMessage');
       for (var i = 0; i < posts.length; i++) {
         var block = posts[i];
