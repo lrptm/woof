@@ -78,6 +78,13 @@ tr:last-child td { border-bottom: none; }
     <button class="btn btn-danger" id="btnStop" disabled>Stop</button>
     <button class="btn btn-success" id="btnExport" disabled>Export CSV</button>
   </div>
+  <div class="btn-row" style="border-top:1px solid #e0e0e0; padding-top:8px; margin-top:4px">
+    <label style="font-size:13px; display:flex; align-items:center; gap:4px">
+      Top N:
+      <input type="number" id="numTopN" value="20" min="1" max="9999" style="width:60px; padding:4px; font-size:13px; border:1px solid #ccc; border-radius:3px">
+    </label>
+    <button class="btn" id="btnTopWords" style="background:#b5e7a0; font-weight:600">Top Words...</button>
+  </div>
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-text" id="progressText">Ready</div>
@@ -132,6 +139,10 @@ tr:last-child td { border-bottom: none; }
   var files = [];
   var stopRequested = false;
 
+  var stopWords = new Set([
+    "a","about","above","after","again","against","all","am","an","and","any","are","arent","as","at","be","because","been","before","being","below","between","both","but","by","cant","cannot","could","couldnt","d","did","didnt","do","does","doesnt","doing","dont","down","during","each","few","for","from","further","had","hadnt","has","hasnt","have","havent","having","he","hed","hell","hes","her","here","heres","hers","herself","him","himself","his","how","hows","i","id","ill","im","ive","if","in","into","is","isnt","it","its","its","itself","lets","ll","me","more","most","mustnt","my","myself","no","nor","not","of","off","on","once","only","or","other","ought","our","ours","ourselves","out","over","own","re","s","same","shant","she","shed","shell","shes","should","shouldnt","so","some","such","t","than","that","thats","the","their","theirs","them","themselves","then","there","theres","these","they","theyd","theyll","theyre","theyve","this","those","through","to","too","under","until","up","v","ve","very","was","wasnt","we","wed","well","were","weve","were","werent","what","whats","when","whens","where","wheres","which","while","who","whos","whom","why","whys","will","with","wont","would","wouldnt","you","youd","youll","youre","youve","your","yours","yourself","yourselves"
+  ]);
+
   // DOM refs
   var dropZone = document.getElementById('dropZone');
   var fileInput = document.getElementById('fileInput');
@@ -142,6 +153,8 @@ tr:last-child td { border-bottom: none; }
   var btnFind = document.getElementById('btnFind');
   var btnStop = document.getElementById('btnStop');
   var btnExport = document.getElementById('btnExport');
+  var btnTopWords = document.getElementById('btnTopWords');
+  var numTopN = document.getElementById('numTopN');
   var progressWrap = document.getElementById('progressWrap');
   var progressFill = document.getElementById('progressFill');
   var progressText = document.getElementById('progressText');
@@ -385,6 +398,111 @@ tr:last-child td { border-bottom: none; }
   // Stop button
   btnStop.addEventListener('click', function() {
     stopRequested = true;
+  });
+
+  // Top Words button
+  btnTopWords.addEventListener('click', function() {
+    if (files.length === 0) {
+      alert('Please add at least one file.');
+      return;
+    }
+
+    stopRequested = false;
+    btnFind.disabled = true;
+    btnTopWords.disabled = true;
+    btnStop.disabled = false;
+    btnExport.disabled = true;
+    progressWrap.classList.add('show');
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Starting...';
+
+    var caseSensitive = chkCaseSensitive.checked;
+    var topN = parseInt(numTopN.value, 10) || 20;
+    var wordPattern = /\b\w+\b/g;
+    var freq = {};
+    var fileIdx = 0;
+
+    function processNextFile() {
+      if (stopRequested) {
+        finish(true);
+        return;
+      }
+
+      if (fileIdx >= files.length) {
+        finish(false);
+        return;
+      }
+
+      var file = files[fileIdx];
+      progressText.textContent = 'Indexing: ' + file.name + ' (' + (fileIdx + 1) + ' / ' + files.length + ')';
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var content = e.target.result;
+        var match;
+
+        if (caseSensitive) {
+          while ((match = wordPattern.exec(content)) !== null) {
+            processWord(match[0]);
+          }
+        } else {
+          while ((match = wordPattern.exec(content)) !== null) {
+            processWord(match[0].toLowerCase());
+          }
+        }
+
+        fileIdx++;
+        var pct = Math.min(100, (fileIdx / files.length) * 100);
+        progressFill.style.width = pct.toFixed(1) + '%';
+        setTimeout(processNextFile, 0);
+      };
+
+      reader.onerror = function() {
+        fileIdx++;
+        setTimeout(processNextFile, 0);
+      };
+
+      reader.readAsText(file);
+    }
+
+    function processWord(w) {
+      if (/\d/.test(w)) { return; }
+      if (stopWords.has(w)) { return; }
+      w = w.replace(/^(.+)'s$/, '$1');
+      if (w.indexOf("'") !== -1) { return; }
+      if (w.length <= 1) { return; }
+      freq[w] = (freq[w] || 0) + 1;
+    }
+
+    function finish(stopped) {
+      var sorted = Object.keys(freq).map(function(k) { return { word: k, count: freq[k] }; });
+      sorted.sort(function(a, b) { return b.count - a.count; });
+      var top = sorted.slice(0, topN);
+
+      resultBody.innerHTML = '';
+      for (var i = 0; i < top.length; i++) {
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td');
+        td1.textContent = top[i].word;
+        var td2 = document.createElement('td');
+        td2.textContent = top[i].count;
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        resultBody.appendChild(tr);
+      }
+      resultTable.style.display = '';
+      emptyState.style.display = 'none';
+
+      var label = stopped ? 'Stopped early' : 'Done';
+      progressText.textContent = label + ' \u2014 top ' + topN + ' of ' + Object.keys(freq).length + ' unique words across ' + files.length + ' files';
+
+      btnFind.disabled = false;
+      btnTopWords.disabled = false;
+      btnStop.disabled = true;
+      btnExport.disabled = false;
+    }
+
+    processNextFile();
   });
 
   // Export CSV
