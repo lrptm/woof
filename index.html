@@ -266,15 +266,26 @@ window.onerror = function(msg, url, line) {
 
       var chanM = url.match(/^https?:\/\/(?:boards|a)\.4(?:chan|cdn)\.org\/(\w+)\/thread\/(\d+)/);
       if (chanM) {
-        doFetch('https://a.4cdn.org/' + chanM[1] + '/thread/' + chanM[2] + '.json', function(obj) {
-          var t = '';
-          for (var i = 0; i < obj.posts.length; i++) { if (obj.posts[i].com) t += strip(obj.posts[i].com) + '\n'; }
-          if (t.trim()) urlData.push({ name: url, content: t });
+        var apiUrl = 'https://a.4cdn.org/' + chanM[1] + '/thread/' + chanM[2] + '.json';
+        var x = new XMLHttpRequest();
+        var xdone = false;
+        x.timeout = 15000;
+        x.open('GET', apiUrl, true);
+        x.onload = function() {
+          if (xdone) return; xdone = true;
+          if (x.status >= 200 && x.status < 300) {
+            try {
+              var obj = JSON.parse(x.responseText);
+              var t = '';
+              for (var i = 0; i < obj.posts.length; i++) { if (obj.posts[i].com) t += strip(obj.posts[i].com) + '\n'; }
+              if (t.trim()) urlData.push({ name: url, content: t });
+            } catch(e) {}
+          }
           idx++; setTimeout(next, 0);
-        }, function(err) {
-          alert('Failed: ' + url + '\n' + err);
-          idx++; setTimeout(next, 0);
-        });
+        };
+        x.onerror = function() { if (!xdone) { xdone = true; alert('Failed: ' + url); idx++; setTimeout(next, 0); } };
+        x.ontimeout = function() { if (!xdone) { xdone = true; alert('Timeout: ' + url); idx++; setTimeout(next, 0); } };
+        x.send();
         return;
       }
 
@@ -285,51 +296,34 @@ window.onerror = function(msg, url, line) {
         return;
       }
 
-      doFetch('https://' + ffM[1] + '/_/api/chan/thread/?board=' + ffM[2] + '&num=' + ffM[3], function(obj) {
-        var t = '';
-        var key = Object.keys(obj)[0];
-        var td = obj[key];
-        if (td.op && td.op.comment) t += strip(td.op.comment) + '\n';
-        var pk = Object.keys(td.posts);
-        for (var i = 0; i < pk.length; i++) { var p = td.posts[pk[i]]; if (p.comment) t += strip(p.comment) + '\n'; }
-        if (t.trim()) urlData.push({ name: url, content: t });
+      var apiUrl = 'https://' + ffM[1] + '/_/api/chan/thread/?board=' + ffM[2] + '&num=' + ffM[3];
+      var x = new XMLHttpRequest();
+      var xdone = false;
+      x.timeout = 15000;
+      x.open('GET', apiUrl, true);
+      x.onload = function() {
+        if (xdone) return; xdone = true;
+        if (x.status >= 200 && x.status < 300) {
+          try {
+            var obj = JSON.parse(x.responseText);
+            var t = '';
+            var key = Object.keys(obj)[0];
+            var td = obj[key];
+            if (td.op && td.op.comment) t += strip(td.op.comment) + '\n';
+            var pk = Object.keys(td.posts);
+            for (var i = 0; i < pk.length; i++) { var p = td.posts[pk[i]]; if (p.comment) t += strip(p.comment) + '\n'; }
+            if (t.trim()) urlData.push({ name: url, content: t });
+          } catch(e) {}
+        }
         idx++; setTimeout(next, 0);
-      }, function(err) {
-        alert('Failed: ' + url + '\n' + err);
-        idx++; setTimeout(next, 0);
-      });
+      };
+      x.onerror = function() { if (!xdone) { xdone = true; alert('Failed: ' + url); idx++; setTimeout(next, 0); } };
+      x.ontimeout = function() { if (!xdone) { xdone = true; alert('Timeout: ' + url); idx++; setTimeout(next, 0); } };
+      x.send();
     }
 
     next();
   });
-
-  function doFetch(url, onOk, onErr) {
-    var done = false;
-    function timeout() {
-      if (!done) { done = true; onErr('Timeout (15s)'); }
-    }
-    var timer = setTimeout(timeout, 15000);
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.onload = function() {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try { onOk(JSON.parse(xhr.responseText)); }
-        catch(e) { onErr('Invalid JSON'); }
-      } else {
-        onErr('HTTP ' + xhr.status);
-      }
-    };
-    xhr.onerror = function() {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      onErr('Network error');
-    };
-    xhr.send();
-  }
 
   function strip(html) {
     var d = document.createElement('div');
