@@ -64,6 +64,14 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
+  <div class="section-title">URLs (one per line)</div>
+  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px; height:50px"></textarea>
+  <div style="display:flex; gap:6px; margin-top:6px">
+    <button class="btn" id="btnFetchUrls" style="background:#ffe0b0">Fetch URLs</button>
+  </div>
+</div>
+
+<div class="section">
   <div class="section-title" style="display:flex; align-items:center; gap:8px">
     <span>Words (one per line)</span>
     <label style="font-size:12px; font-weight:400; display:flex; align-items:center; gap:3px; cursor:pointer">
@@ -142,6 +150,7 @@ tr:last-child td { border-bottom: none; }
 
   // State
   var files = [];
+  var urlEntries = [];
   var stopRequested = false;
 
   var stopWords = new Set([
@@ -161,6 +170,9 @@ tr:last-child td { border-bottom: none; }
   var btnExport = document.getElementById('btnExport');
   var btnTopWords = document.getElementById('btnTopWords');
   var numTopN = document.getElementById('numTopN');
+  var urlsInput = document.getElementById('urlsInput');
+  var btnFetchUrls = document.getElementById('btnFetchUrls');
+  var CORS_PROXY = 'https://api.allorigins.win/raw?url=';
   var progressWrap = document.getElementById('progressWrap');
   var progressFill = document.getElementById('progressFill');
   var progressText = document.getElementById('progressText');
@@ -170,26 +182,85 @@ tr:last-child td { border-bottom: none; }
 
   // Update file list UI
   function renderFiles() {
-    if (files.length === 0) {
+    var allItems = [];
+    for (var i = 0; i < files.length; i++) {
+      allItems.push({ type: 'file', name: files[i].name, idx: i });
+    }
+    for (var i = 0; i < urlEntries.length; i++) {
+      allItems.push({ type: 'url', name: urlEntries[i].name, idx: i });
+    }
+    if (allItems.length === 0) {
       fileList.classList.remove('show');
       fileList.innerHTML = '';
       return;
     }
     fileList.classList.add('show');
     var html = '';
-    for (var i = 0; i < files.length; i++) {
-      html += '<div class="file-item">' + escapeHtml(files[i].name) + ' <span class="remove" data-idx="' + i + '">&#10005;</span></div>';
+    for (var i = 0; i < allItems.length; i++) {
+      html += '<div class="file-item" data-type="' + allItems[i].type + '" data-idx="' + allItems[i].idx + '">' + escapeHtml(allItems[i].name) + ' <span class="remove">&#10005;</span></div>';
     }
     fileList.innerHTML = html;
-    // Bind remove buttons
     var removes = fileList.querySelectorAll('.remove');
     for (var r = 0; r < removes.length; r++) {
       removes[r].addEventListener('click', function(e) {
-        var idx = parseInt(e.target.getAttribute('data-idx'), 10);
-        files.splice(idx, 1);
+        e.stopPropagation();
+        var item = e.target.parentElement;
+        var type = item.getAttribute('data-type');
+        var idx = parseInt(item.getAttribute('data-idx'), 10);
+        if (type === 'file') {
+          files.splice(idx, 1);
+        } else {
+          urlEntries.splice(idx, 1);
+        }
         renderFiles();
       });
     }
+  }
+
+  function extractTextFromHtml(html, url) {
+    var doc;
+    try {
+      doc = new DOMParser().parseFromString(html, 'text/html');
+    } catch(e) {
+      return '';
+    }
+
+    // Remove non-content elements
+    var removals = doc.querySelectorAll('script, style, nav, footer, header, aside, noscript');
+    for (var i = 0; i < removals.length; i++) {
+      removals[i].remove();
+    }
+
+    var text = '';
+
+    if (url.indexOf('4chan.org') !== -1 || url.indexOf('4channel.org') !== -1) {
+      var posts = doc.querySelectorAll('blockquote.postMessage');
+      for (var i = 0; i < posts.length; i++) {
+        var block = posts[i];
+        var brs = block.querySelectorAll('br');
+        for (var j = 0; j < brs.length; j++) {
+          brs[j].replaceWith('\n');
+        }
+        text += block.textContent + '\n';
+      }
+    } else if (url.indexOf('nitter.net') !== -1 || url.indexOf('xcancel.com') !== -1) {
+      var tweets = doc.querySelectorAll('.tweet-content, [class*="tweet-body"]');
+      for (var i = 0; i < tweets.length; i++) {
+        text += tweets[i].textContent + '\n';
+      }
+    } else {
+      var body = doc.body;
+      if (body) {
+        var brs = body.querySelectorAll('br');
+        for (var j = 0; j < brs.length; j++) {
+          brs[j].replaceWith('\n');
+        }
+        text = body.textContent || '';
+        text = text.replace(/^\s+/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+      }
+    }
+
+    return text;
   }
 
   function escapeHtml(str) {
@@ -255,6 +326,71 @@ tr:last-child td { border-bottom: none; }
     renderFiles();
   });
 
+  // Fetch URLs button
+  btnFetchUrls.addEventListener('click', function() {
+    var raw = urlsInput.value;
+    var urls = [];
+    var lines = raw.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var u = lines[i].trim();
+      if (u !== '') { urls.push(u); }
+    }
+    if (urls.length === 0) {
+      alert('Enter at least one URL.');
+      return;
+    }
+
+    btnFetchUrls.disabled = true;
+    btnFetchUrls.textContent = 'Fetching...';
+    var idx = 0;
+
+    function fetchNext() {
+      if (idx >= urls.length) {
+        btnFetchUrls.disabled = false;
+        btnFetchUrls.textContent = 'Fetch URLs';
+        renderFiles();
+        return;
+      }
+
+      var url = urls[idx];
+      progressWrap.classList.add('show');
+      progressText.textContent = 'Fetching: ' + url;
+
+      // Check if already fetched
+      for (var e = 0; e < urlEntries.length; e++) {
+        if (urlEntries[e].url === url) {
+          idx++;
+          setTimeout(fetchNext, 0);
+          return;
+        }
+      }
+
+      var proxyUrl = CORS_PROXY + encodeURIComponent(url);
+
+      fetch(proxyUrl)
+        .then(function(resp) { return resp.text(); })
+        .then(function(html) {
+          var text = extractTextFromHtml(html, url);
+          if (text.trim()) {
+            urlEntries.push({
+              url: url,
+              name: '\uD83C\uDF10 ' + url,
+              content: text
+            });
+          }
+          idx++;
+          setTimeout(fetchNext, 0);
+        })
+        .catch(function(err) {
+          alert('Failed to fetch: ' + url + '\n' + err.message);
+          idx++;
+          setTimeout(fetchNext, 0);
+        });
+    }
+
+    fetchNext();
+  });
+
   // Custom words checkbox toggle
   chkCustomWords.addEventListener('change', function() {
     if (chkCustomWords.checked) {
@@ -307,15 +443,43 @@ tr:last-child td { border-bottom: none; }
     var caseSensitive = chkCaseSensitive.checked;
     var flags = 'g' + (caseSensitive ? '' : 'i');
 
-    var totalSteps = files.length * words.length;
+    // Build combined source list: each item has { name, getContent(cb) }
+    var sources = [];
+    for (var fi = 0; fi < files.length; fi++) {
+      (function(f) {
+        sources.push({
+          name: f.name,
+          getContent: function(cb) {
+            var reader = new FileReader();
+            reader.onload = function(e) { cb(e.target.result); };
+            reader.onerror = function() { cb(''); };
+            reader.readAsText(f);
+          }
+        });
+      })(files[fi]);
+    }
+    for (var ui = 0; ui < urlEntries.length; ui++) {
+      (function(e) {
+        sources.push({
+          name: e.name,
+          getContent: function(cb) { cb(e.content); }
+        });
+      })(urlEntries[ui]);
+    }
+
+    if (sources.length === 0) {
+      alert('No sources to process.');
+      return;
+    }
+
+    var totalSteps = sources.length * words.length;
     var completed = 0;
     var results = {};
     for (var wi = 0; wi < words.length; wi++) {
       results[words[wi]] = 0;
     }
 
-    // Process files sequentially
-    var fileIdx = 0;
+    var sourceIdx = 0;
     var wordIdx = 0;
 
     function processNext() {
@@ -324,21 +488,17 @@ tr:last-child td { border-bottom: none; }
         return;
       }
 
-      if (fileIdx >= files.length) {
+      if (sourceIdx >= sources.length) {
         finish(false);
         return;
       }
 
-      var file = files[fileIdx];
+      var source = sources[sourceIdx];
       var word = words[wordIdx];
 
-      progressText.textContent = 'Processing: ' + file.name + ' - \u2018' + word + '\u2019 (' + (completed) + ' / ' + totalSteps + ')';
+      progressText.textContent = 'Processing: ' + source.name + ' - \u2018' + word + '\u2019 (' + (completed) + ' / ' + totalSteps + ')';
 
-      var reader = new FileReader();
-
-      reader.onload = function(e) {
-        var content = e.target.result;
-
+      source.getContent(function(content) {
         var pattern;
         var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (wholeWord) {
@@ -353,43 +513,25 @@ tr:last-child td { border-bottom: none; }
           var count = 0;
           while ((match = regex.exec(content)) !== null) {
             count++;
-            // Prevent infinite loops on zero-length matches
             if (match.index === regex.lastIndex) {
               regex.lastIndex++;
             }
           }
           results[word] += count;
-        } catch (err) {
-          // Invalid regex (shouldn't happen since we escape)
-        }
+        } catch (err) {}
 
         completed++;
         var pct = Math.min(100, (completed / totalSteps) * 100);
         progressFill.style.width = pct.toFixed(1) + '%';
-        progressText.textContent = 'Processing: ' + file.name + ' - \u2018' + word + '\u2019 (' + completed + ' / ' + totalSteps + ')';
+        progressText.textContent = 'Processing: ' + source.name + ' - \u2018' + word + '\u2019 (' + completed + ' / ' + totalSteps + ')';
 
-        // Next iteration
         wordIdx++;
         if (wordIdx >= words.length) {
           wordIdx = 0;
-          fileIdx++;
-        }
-
-        // Use setTimeout to yield to UI
-        setTimeout(processNext, 0);
-      };
-
-      reader.onerror = function() {
-        completed++;
-        wordIdx++;
-        if (wordIdx >= words.length) {
-          wordIdx = 0;
-          fileIdx++;
+          sourceIdx++;
         }
         setTimeout(processNext, 0);
-      };
-
-      reader.readAsText(file);
+      });
     }
 
     function finish(stopped) {
@@ -409,7 +551,7 @@ tr:last-child td { border-bottom: none; }
       emptyState.style.display = 'none';
 
       var label = stopped ? 'Stopped early' : 'Done';
-      progressText.textContent = label + ' \u2014 ' + words.length + ' words across ' + files.length + ' files';
+      progressText.textContent = label + ' \u2014 ' + words.length + ' words across ' + sources.length + ' sources';
 
       btnFind.disabled = false;
       btnStop.disabled = true;
@@ -444,25 +586,53 @@ tr:last-child td { border-bottom: none; }
     var topN = parseInt(numTopN.value, 10) || 20;
     var wordPattern = /\b\w+\b/g;
     var freq = {};
-    var fileIdx = 0;
 
-    function processNextFile() {
+    // Build sources
+    var sources = [];
+    for (var fi = 0; fi < files.length; fi++) {
+      (function(f) {
+        sources.push({
+          name: f.name,
+          getContent: function(cb) {
+            var reader = new FileReader();
+            reader.onload = function(e) { cb(e.target.result); };
+            reader.onerror = function() { cb(''); };
+            reader.readAsText(f);
+          }
+        });
+      })(files[fi]);
+    }
+    for (var ui = 0; ui < urlEntries.length; ui++) {
+      (function(e) {
+        sources.push({
+          name: e.name,
+          getContent: function(cb) { cb(e.content); }
+        });
+      })(urlEntries[ui]);
+    }
+
+    if (sources.length === 0) {
+      alert('No sources to process.');
+      return;
+    }
+
+    var sourceIdx = 0;
+
+    function processNextSource() {
       if (stopRequested) {
         finish(true);
         return;
       }
 
-      if (fileIdx >= files.length) {
+      if (sourceIdx >= sources.length) {
         finish(false);
         return;
       }
 
-      var file = files[fileIdx];
-      progressText.textContent = 'Indexing: ' + file.name + ' (' + (fileIdx + 1) + ' / ' + files.length + ')';
+      var source = sources[sourceIdx];
+      progressText.textContent = 'Indexing: ' + source.name + ' (' + (sourceIdx + 1) + ' / ' + sources.length + ')';
 
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        var content = e.target.result;
+      source.getContent(function(content) {
         var match;
 
         if (caseSensitive) {
@@ -475,18 +645,11 @@ tr:last-child td { border-bottom: none; }
           }
         }
 
-        fileIdx++;
-        var pct = Math.min(100, (fileIdx / files.length) * 100);
+        sourceIdx++;
+        var pct = Math.min(100, (sourceIdx / sources.length) * 100);
         progressFill.style.width = pct.toFixed(1) + '%';
-        setTimeout(processNextFile, 0);
-      };
-
-      reader.onerror = function() {
-        fileIdx++;
-        setTimeout(processNextFile, 0);
-      };
-
-      reader.readAsText(file);
+        setTimeout(processNextSource, 0);
+      });
     }
 
     function processWord(w) {
@@ -518,7 +681,7 @@ tr:last-child td { border-bottom: none; }
       emptyState.style.display = 'none';
 
       var label = stopped ? 'Stopped early' : 'Done';
-      progressText.textContent = label + ' \u2014 top ' + topN + ' of ' + Object.keys(freq).length + ' unique words across ' + files.length + ' files';
+      progressText.textContent = label + ' \u2014 top ' + topN + ' of ' + Object.keys(freq).length + ' unique words across ' + sources.length + ' sources';
 
       btnFind.disabled = false;
       btnTopWords.disabled = false;
@@ -526,7 +689,7 @@ tr:last-child td { border-bottom: none; }
       btnExport.disabled = false;
     }
 
-    processNextFile();
+    processNextSource();
   });
 
   // Export CSV
