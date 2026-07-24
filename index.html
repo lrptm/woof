@@ -64,10 +64,14 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
-  <div class="section-title">URLs (one per line)</div>
-  <textarea class="words-area" id="urlsInput" spellcheck="false" style="min-height:50px; height:50px"></textarea>
-  <div style="display:flex; gap:6px; margin-top:6px">
-    <button class="btn" id="btnFetchUrls" style="background:#ffe0b0">Fetch URLs</button>
+  <div class="section-title">Paste page source</div>
+  <textarea class="words-area" id="pasteSource" spellcheck="false" style="min-height:60px;height:60px" placeholder="Paste the full HTML source of a web page here, then tap Parse..."></textarea>
+  <div style="display:flex; gap:6px; margin-top:4px">
+    <input type="text" id="pasteUrl" spellcheck="false" style="flex:1; padding:6px 8px; font-size:13px; border:1px solid #ccc; border-radius:3px" placeholder="URL this came from (for correct parsing, optional)">
+  </div>
+  <div style="display:flex;gap:6px;margin-top:6px">
+    <button class="btn" id="btnParsePaste" style="background:#ffe0b0">Parse HTML</button>
+    <span style="font-size:12px;color:#999;align-self:center">Tip: Save page as .html and drag into Files above</span>
   </div>
 </div>
 
@@ -150,7 +154,7 @@ tr:last-child td { border-bottom: none; }
 
   // State
   var files = [];
-  var urlEntries = [];
+  var pasteEntries = [];
   var stopRequested = false;
 
   var stopWords = new Set([
@@ -170,9 +174,9 @@ tr:last-child td { border-bottom: none; }
   var btnExport = document.getElementById('btnExport');
   var btnTopWords = document.getElementById('btnTopWords');
   var numTopN = document.getElementById('numTopN');
-  var urlsInput = document.getElementById('urlsInput');
-  var btnFetchUrls = document.getElementById('btnFetchUrls');
-  var CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+  var pasteSource = document.getElementById('pasteSource');
+  var pasteUrl = document.getElementById('pasteUrl');
+  var btnParsePaste = document.getElementById('btnParsePaste');
   var progressWrap = document.getElementById('progressWrap');
   var progressFill = document.getElementById('progressFill');
   var progressText = document.getElementById('progressText');
@@ -186,8 +190,8 @@ tr:last-child td { border-bottom: none; }
     for (var i = 0; i < files.length; i++) {
       allItems.push({ type: 'file', name: files[i].name, idx: i });
     }
-    for (var i = 0; i < urlEntries.length; i++) {
-      allItems.push({ type: 'url', name: urlEntries[i].name, idx: i });
+    for (var i = 0; i < pasteEntries.length; i++) {
+      allItems.push({ type: 'paste', name: pasteEntries[i].name, idx: i });
     }
     if (allItems.length === 0) {
       fileList.classList.remove('show');
@@ -209,8 +213,8 @@ tr:last-child td { border-bottom: none; }
         var idx = parseInt(item.getAttribute('data-idx'), 10);
         if (type === 'file') {
           files.splice(idx, 1);
-        } else {
-          urlEntries.splice(idx, 1);
+        } else if (type === 'paste') {
+          pasteEntries.splice(idx, 1);
         }
         renderFiles();
       });
@@ -335,69 +339,28 @@ tr:last-child td { border-bottom: none; }
     renderFiles();
   });
 
-  // Fetch URLs button
-  btnFetchUrls.addEventListener('click', function() {
-    var raw = urlsInput.value;
-    var urls = [];
-    var lines = raw.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var u = lines[i].trim();
-      if (u !== '') { urls.push(u); }
-    }
-    if (urls.length === 0) {
-      alert('Enter at least one URL.');
+  // Parse pasted HTML button
+  btnParsePaste.addEventListener('click', function() {
+    var raw = pasteSource.value.trim();
+    if (raw === '') {
+      alert('Paste the HTML source of a web page first.');
       return;
     }
 
-    btnFetchUrls.disabled = true;
-    btnFetchUrls.textContent = 'Fetching...';
-    var idx = 0;
-
-    function fetchNext() {
-      if (idx >= urls.length) {
-        btnFetchUrls.disabled = false;
-        btnFetchUrls.textContent = 'Fetch URLs';
-        renderFiles();
-        return;
-      }
-
-      var url = urls[idx];
-      progressWrap.classList.add('show');
-      progressText.textContent = 'Fetching: ' + url;
-
-      // Check if already fetched
-      for (var e = 0; e < urlEntries.length; e++) {
-        if (urlEntries[e].url === url) {
-          idx++;
-          setTimeout(fetchNext, 0);
-          return;
-        }
-      }
-
-      var proxyUrl = CORS_PROXY + encodeURIComponent(url);
-
-      fetch(proxyUrl)
-        .then(function(resp) { return resp.text(); })
-        .then(function(html) {
-          var text = extractTextFromHtml(html, url);
-          if (text.trim()) {
-            urlEntries.push({
-              url: url,
-              name: '\uD83C\uDF10 ' + url,
-              content: text
-            });
-          }
-          idx++;
-          setTimeout(fetchNext, 0);
-        })
-        .catch(function(err) {
-          alert('Failed to fetch: ' + url + '\n' + err.message);
-          idx++;
-          setTimeout(fetchNext, 0);
-        });
+    var sourceUrl = pasteUrl.value.trim() || '';
+    var label = sourceUrl ? '\uD83C\uDF10 ' + sourceUrl : 'Paste ' + (pasteEntries.length + 1);
+    var text = extractTextFromHtml(raw, sourceUrl);
+    if (text.trim()) {
+      pasteEntries.push({
+        name: label,
+        content: text
+      });
+      pasteSource.value = '';
+      pasteUrl.value = '';
+      renderFiles();
+    } else {
+      alert('No text could be extracted. Make sure you pasted the full HTML page source.');
     }
-
-    fetchNext();
   });
 
   // Custom words checkbox toggle
@@ -467,13 +430,13 @@ tr:last-child td { border-bottom: none; }
         });
       })(files[fi]);
     }
-    for (var ui = 0; ui < urlEntries.length; ui++) {
+    for (var ui = 0; ui < pasteEntries.length; ui++) {
       (function(e) {
         sources.push({
           name: e.name,
           getContent: function(cb) { cb(e.content); }
         });
-      })(urlEntries[ui]);
+      })(pasteEntries[ui]);
     }
 
     if (sources.length === 0) {
@@ -611,13 +574,13 @@ tr:last-child td { border-bottom: none; }
         });
       })(files[fi]);
     }
-    for (var ui = 0; ui < urlEntries.length; ui++) {
+    for (var ui = 0; ui < pasteEntries.length; ui++) {
       (function(e) {
         sources.push({
           name: e.name,
           getContent: function(cb) { cb(e.content); }
         });
-      })(urlEntries[ui]);
+      })(pasteEntries[ui]);
     }
 
     if (sources.length === 0) {
