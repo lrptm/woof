@@ -145,19 +145,16 @@ tr:last-child td { border-bottom: none; }
     return result;
   }
 
-  // Pre-fill with 10 random words
   document.getElementById('wordsInput').value = pickRandom(genericWords, 10).join('\n');
 
-  // State
   var files = [];
-  var pasteEntries = [];
+  var urlData = [];
   var stopRequested = false;
 
   var stopWords = new Set([
     "a","about","above","after","again","against","all","am","an","and","any","are","arent","as","at","be","because","been","before","being","below","between","both","but","by","cant","cannot","could","couldnt","d","did","didnt","do","does","doesnt","doing","dont","down","during","each","few","for","from","further","had","hadnt","has","hasnt","have","havent","having","he","hed","hell","hes","her","here","heres","hers","herself","him","himself","his","how","hows","i","id","ill","im","ive","if","in","into","is","isnt","it","its","its","itself","lets","ll","me","more","most","mustnt","my","myself","no","nor","not","of","off","on","once","only","or","other","ought","our","ours","ourselves","out","over","own","re","s","same","shant","she","shed","shell","shes","should","shouldnt","so","some","such","t","than","that","thats","the","their","theirs","them","themselves","then","there","theres","these","they","theyd","theyll","theyre","theyve","this","those","through","to","too","under","until","up","v","ve","very","was","wasnt","we","wed","well","were","weve","were","werent","what","whats","when","whens","where","wheres","which","while","who","whos","whom","why","whys","will","with","wont","would","wouldnt","you","youd","youll","youre","youve","your","yours","yourself","yourselves"
   ]);
 
-  // DOM refs
   var dropZone = document.getElementById('dropZone');
   var fileInput = document.getElementById('fileInput');
   var fileList = document.getElementById('fileList');
@@ -179,272 +176,174 @@ tr:last-child td { border-bottom: none; }
   var resultTable = document.getElementById('resultTable');
   var emptyState = document.getElementById('emptyState');
 
-  // Update file list UI
   function renderFiles() {
-    var allItems = [];
-    for (var i = 0; i < files.length; i++) {
-      allItems.push({ type: 'file', name: files[i].name, idx: i });
-    }
-    for (var i = 0; i < pasteEntries.length; i++) {
-      allItems.push({ type: 'paste', name: pasteEntries[i].name, idx: i });
-    }
-    if (allItems.length === 0) {
-      fileList.classList.remove('show');
-      fileList.innerHTML = '';
-      return;
-    }
+    var all = [];
+    for (var i = 0; i < files.length; i++) all.push({ t: 'file', name: files[i].name, i: i });
+    for (var i = 0; i < urlData.length; i++) all.push({ t: 'url', name: urlData[i].name, i: i });
+    if (all.length === 0) { fileList.classList.remove('show'); fileList.innerHTML = ''; return; }
     fileList.classList.add('show');
-    var html = '';
-    for (var i = 0; i < allItems.length; i++) {
-      html += '<div class="file-item" data-type="' + allItems[i].type + '" data-idx="' + allItems[i].idx + '">' + escapeHtml(allItems[i].name) + ' <span class="remove">&#10005;</span></div>';
+    var h = '';
+    for (var i = 0; i < all.length; i++) {
+      h += '<div class="file-item" data-t="' + all[i].t + '" data-i="' + all[i].i + '">' + esc(all[i].name) + ' <span class="remove">&#10005;</span></div>';
     }
-    fileList.innerHTML = html;
-    var removes = fileList.querySelectorAll('.remove');
-    for (var r = 0; r < removes.length; r++) {
-      removes[r].addEventListener('click', function(e) {
+    fileList.innerHTML = h;
+    var rms = fileList.querySelectorAll('.remove');
+    for (var r = 0; r < rms.length; r++) {
+      rms[r].addEventListener('click', function(e) {
         e.stopPropagation();
-        var item = e.target.parentElement;
-        var type = item.getAttribute('data-type');
-        var idx = parseInt(item.getAttribute('data-idx'), 10);
-        if (type === 'file') {
-          files.splice(idx, 1);
-        } else if (type === 'paste') {
-          pasteEntries.splice(idx, 1);
-        }
+        var el = e.target.parentElement;
+        var t = el.getAttribute('data-t');
+        var i = parseInt(el.getAttribute('data-i'), 10);
+        if (t === 'file') files.splice(i, 1); else urlData.splice(i, 1);
         renderFiles();
       });
     }
   }
 
-  function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-  // File input change
   fileInput.addEventListener('change', function(e) {
-    var selected = e.target.files;
-    for (var i = 0; i < selected.length; i++) {
-      // Deduplicate by name + size + lastModified
+    var sel = e.target.files;
+    for (var i = 0; i < sel.length; i++) {
       var dup = false;
       for (var j = 0; j < files.length; j++) {
-        if (files[j].name === selected[i].name && files[j].size === selected[i].size && files[j].lastModified === selected[i].lastModified) {
-          dup = true;
-          break;
-        }
+        if (files[j].name === sel[i].name && files[j].size === sel[i].size && files[j].lastModified === sel[i].lastModified) { dup = true; break; }
       }
-      if (!dup) {
-        files.push(selected[i]);
-      }
+      if (!dup) files.push(sel[i]);
     }
     renderFiles();
-    // Reset so same file can be selected again
     fileInput.value = '';
   });
 
-  // Drop zone click
-  dropZone.addEventListener('click', function(e) {
-    if (e.target.tagName !== 'INPUT') {
-      fileInput.click();
-    }
-  });
-
-  // Drag/drop
-  dropZone.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    dropZone.classList.add('dragover');
-  });
-  dropZone.addEventListener('dragleave', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    dropZone.classList.remove('dragover');
-  });
+  dropZone.addEventListener('click', function(e) { if (e.target.tagName !== 'INPUT') fileInput.click(); });
+  dropZone.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover'); });
   dropZone.addEventListener('drop', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    dropZone.classList.remove('dragover');
-    var dropped = e.dataTransfer.files;
-    for (var i = 0; i < dropped.length; i++) {
+    e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover');
+    var df = e.dataTransfer.files;
+    for (var i = 0; i < df.length; i++) {
       var dup = false;
       for (var j = 0; j < files.length; j++) {
-        if (files[j].name === dropped[i].name && files[j].size === dropped[i].size && files[j].lastModified === dropped[i].lastModified) {
-          dup = true;
-          break;
-        }
+        if (files[j].name === df[i].name && files[j].size === df[i].size && files[j].lastModified === df[i].lastModified) { dup = true; break; }
       }
-      if (!dup) {
-        files.push(dropped[i]);
-      }
+      if (!dup) files.push(df[i]);
     }
     renderFiles();
   });
 
-  // Fetch archive URLs (FoolFuuka API)
   btnFetchUrls.addEventListener('click', function() {
-    var raw = urlsInput.value;
-    var lines = raw.split('\n');
+    var lines = urlsInput.value.split('\n');
     var urls = [];
-    for (var i = 0; i < lines.length; i++) {
-      var u = lines[i].trim();
-      if (u !== '') urls.push(u);
-    }
-    if (urls.length === 0) {
-      alert('Enter at least one URL.');
-      return;
-    }
+    for (var i = 0; i < lines.length; i++) { var u = lines[i].trim(); if (u) urls.push(u); }
+    if (urls.length === 0) { alert('Enter at least one URL.'); return; }
 
     btnFetchUrls.disabled = true;
     btnFetchUrls.textContent = 'Fetching...';
     var idx = 0;
 
-    function fetchNext() {
+    function next() {
       if (idx >= urls.length) {
         btnFetchUrls.disabled = false;
         btnFetchUrls.textContent = 'Fetch URLs';
         renderFiles();
         return;
       }
-
       var url = urls[idx];
       progressWrap.classList.add('show');
       progressText.textContent = 'Fetching: ' + url;
 
-      // Check if already fetched
-      for (var e = 0; e < pasteEntries.length; e++) {
-        if (pasteEntries[e].name === '\uD83C\uDF10 ' + url) {
-          idx++;
-          setTimeout(fetchNext, 0);
-          return;
-        }
+      for (var e = 0; e < urlData.length; e++) {
+        if (urlData[e].name === url) { idx++; setTimeout(next, 0); return; }
       }
 
-      // Try 4chan API
       var chanM = url.match(/^https?:\/\/(?:boards|a)\.4(?:chan|cdn)\.org\/(\w+)\/thread\/(\d+)/);
       if (chanM) {
-        var chanApi = 'https://a.4cdn.org/' + chanM[1] + '/thread/' + chanM[2] + '.json';
-        timedFetch(chanApi, 15000)
-          .then(function(r) { return r.json(); })
-          .then(function(obj) {
-            var text = '';
-            for (var i = 0; i < obj.posts.length; i++) {
-              if (obj.posts[i].com) text += stripHtml(obj.posts[i].com) + '\n';
-            }
-            if (text.trim()) pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
-            idx++;
-            setTimeout(fetchNext, 0);
-          })
-          .catch(function(e) {
-            alert('Failed to fetch: ' + url + '\n' + e.message);
-            idx++;
-            setTimeout(fetchNext, 0);
-          });
-        return;
-      }
-
-      // Try FoolFuuka API
-      var m = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
-      if (!m) {
-        alert('Could not fetch: ' + url);
-        idx++;
-        setTimeout(fetchNext, 0);
-        return;
-      }
-
-      var apiUrl = 'https://' + m[1] + '/_/api/chan/thread/?board=' + m[2] + '&num=' + m[3];
-      timedFetch(apiUrl, 15000)
-        .then(function(r) { return r.json(); })
-        .then(function(obj) { onFetchDone(obj, url); })
-        .catch(function(e) {
-          alert('Failed to fetch: ' + url + '\n' + e.message);
-          idx++;
-          setTimeout(fetchNext, 0);
+        doFetch('https://a.4cdn.org/' + chanM[1] + '/thread/' + chanM[2] + '.json', function(obj) {
+          var t = '';
+          for (var i = 0; i < obj.posts.length; i++) { if (obj.posts[i].com) t += strip(obj.posts[i].com) + '\n'; }
+          if (t.trim()) urlData.push({ name: url, content: t });
+          idx++; setTimeout(next, 0);
+        }, function(err) {
+          alert('Failed: ' + url + '\n' + err);
+          idx++; setTimeout(next, 0);
         });
+        return;
+      }
+
+      var ffM = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
+      if (!ffM) {
+        alert('Could not fetch: ' + url);
+        idx++; setTimeout(next, 0);
+        return;
+      }
+
+      doFetch('https://' + ffM[1] + '/_/api/chan/thread/?board=' + ffM[2] + '&num=' + ffM[3], function(obj) {
+        var t = '';
+        var key = Object.keys(obj)[0];
+        var td = obj[key];
+        if (td.op && td.op.comment) t += strip(td.op.comment) + '\n';
+        var pk = Object.keys(td.posts);
+        for (var i = 0; i < pk.length; i++) { var p = td.posts[pk[i]]; if (p.comment) t += strip(p.comment) + '\n'; }
+        if (t.trim()) urlData.push({ name: url, content: t });
+        idx++; setTimeout(next, 0);
+      }, function(err) {
+        alert('Failed: ' + url + '\n' + err);
+        idx++; setTimeout(next, 0);
+      });
     }
 
-    function timedFetch(url, ms) {
-      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      var opts = ctrl ? { signal: ctrl.signal } : {};
-      if (ctrl) {
-        setTimeout(function() { ctrl.abort(); }, ms);
-      }
-      return fetch(url, opts);
-    }
-
-    function onFetchDone(obj, url) {
-      var text = '';
-      var threadKey = Object.keys(obj)[0];
-      var threadData = obj[threadKey];
-
-      if (threadData.op && threadData.op.comment) {
-        text += stripHtml(threadData.op.comment) + '\n';
-      }
-      var postKeys = Object.keys(threadData.posts);
-      for (var i = 0; i < postKeys.length; i++) {
-        var post = threadData.posts[postKeys[i]];
-        if (post.comment) {
-          text += stripHtml(post.comment) + '\n';
-        }
-      }
-
-      if (text.trim()) {
-        pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
-      }
-      idx++;
-      setTimeout(fetchNext, 0);
-    }
-
-    fetchNext();
+    next();
   });
 
-  function stripHtml(html) {
-    var tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    var brs = tmp.querySelectorAll('br');
-    for (var i = 0; i < brs.length; i++) {
-      brs[i].replaceWith('\n');
+  function doFetch(url, onOk, onErr) {
+    var done = false;
+    function timeout() {
+      if (!done) { done = true; onErr('Timeout (15s)'); }
     }
-    return tmp.textContent || '';
+    var timer = setTimeout(timeout, 15000);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = function() {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { onOk(JSON.parse(xhr.responseText)); }
+        catch(e) { onErr('Invalid JSON'); }
+      } else {
+        onErr('HTTP ' + xhr.status);
+      }
+    };
+    xhr.onerror = function() {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      onErr('Network error');
+    };
+    xhr.send();
   }
 
-  // Custom words checkbox toggle
+  function strip(html) {
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    var brs = d.querySelectorAll('br');
+    for (var i = 0; i < brs.length; i++) brs[i].parentNode.replaceChild(document.createTextNode('\n'), brs[i]);
+    return d.textContent || '';
+  }
+
   chkCustomWords.addEventListener('change', function() {
-    if (chkCustomWords.checked) {
-      wordsInput.disabled = false;
-      wordsInput.style.background = '#fff';
-      wordsInput.style.color = '#333';
-    } else {
-      wordsInput.disabled = true;
-      wordsInput.style.background = '#f0f0f0';
-      wordsInput.style.color = '#999';
-    }
+    if (chkCustomWords.checked) { wordsInput.disabled = false; wordsInput.style.background = '#fff'; wordsInput.style.color = '#333'; }
+    else { wordsInput.disabled = true; wordsInput.style.background = '#f0f0f0'; wordsInput.style.color = '#999'; }
   });
 
-  // Find button
   btnFind.addEventListener('click', function() {
-    if (files.length === 0) {
-      alert('Please add at least one file.');
-      return;
-    }
-
-    if (!chkCustomWords.checked) {
-      alert("Check 'Custom words' to enter words for Find.");
-      return;
-    }
-
+    if (files.length === 0) { alert('Please add at least one file.'); return; }
+    if (!chkCustomWords.checked) { alert("Check 'Custom words' to enter words for Find."); return; }
     var raw = wordsInput.value;
     var words = [];
     var lines = raw.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var w = lines[i].trim();
-      if (w !== '') {
-        words.push(w);
-      }
-    }
-
-    if (words.length === 0) {
-      alert('Please enter at least one word.');
-      return;
-    }
+    for (var i = 0; i < lines.length; i++) { var w = lines[i].trim(); if (w) words.push(w); }
+    if (words.length === 0) { alert('Please enter at least one word.'); return; }
 
     stopRequested = false;
     btnFind.disabled = true;
@@ -457,290 +356,127 @@ tr:last-child td { border-bottom: none; }
     var wholeWord = chkWholeWord.checked;
     var caseSensitive = chkCaseSensitive.checked;
     var flags = 'g' + (caseSensitive ? '' : 'i');
-
-    // Build combined source list: each item has { name, getContent(cb) }
     var sources = [];
     for (var fi = 0; fi < files.length; fi++) {
-      (function(f) {
-        sources.push({
-          name: f.name,
-          getContent: function(cb) {
-            var reader = new FileReader();
-            reader.onload = function(e) { cb(e.target.result); };
-            reader.onerror = function() { cb(''); };
-            reader.readAsText(f);
-          }
-        });
-      })(files[fi]);
+      (function(f) { sources.push({ name: f.name, get: function(cb) { var r = new FileReader(); r.onload = function(e) { cb(e.target.result); }; r.onerror = function() { cb(''); }; r.readAsText(f); } }); })(files[fi]);
     }
-    for (var ui = 0; ui < pasteEntries.length; ui++) {
-      (function(e) {
-        sources.push({
-          name: e.name,
-          getContent: function(cb) { cb(e.content); }
-        });
-      })(pasteEntries[ui]);
+    for (var ui = 0; ui < urlData.length; ui++) {
+      (function(e) { sources.push({ name: e.name, get: function(cb) { cb(e.content); } }); })(urlData[ui]);
     }
+    if (sources.length === 0) { alert('No sources to process.'); return; }
 
-    if (sources.length === 0) {
-      alert('No sources to process.');
-      return;
-    }
-
-    var totalSteps = sources.length * words.length;
-    var completed = 0;
+    var total = sources.length * words.length;
+    var done = 0;
     var results = {};
-    for (var wi = 0; wi < words.length; wi++) {
-      results[words[wi]] = 0;
-    }
+    for (var wi = 0; wi < words.length; wi++) results[words[wi]] = 0;
+    var si = 0, widx = 0;
 
-    var sourceIdx = 0;
-    var wordIdx = 0;
-
-    function processNext() {
-      if (stopRequested) {
-        finish(true);
-        return;
-      }
-
-      if (sourceIdx >= sources.length) {
-        finish(false);
-        return;
-      }
-
-      var source = sources[sourceIdx];
-      var word = words[wordIdx];
-
-      progressText.textContent = 'Processing: ' + source.name + ' - \u2018' + word + '\u2019 (' + (completed) + ' / ' + totalSteps + ')';
-
-      source.getContent(function(content) {
-        var pattern;
-        var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (wholeWord) {
-          pattern = '\\b' + escaped + '\\b';
-        } else {
-          pattern = escaped;
-        }
-
-        try {
-          var regex = new RegExp(pattern, flags);
-          var match;
-          var count = 0;
-          while ((match = regex.exec(content)) !== null) {
-            count++;
-            if (match.index === regex.lastIndex) {
-              regex.lastIndex++;
-            }
-          }
-          results[word] += count;
-        } catch (err) {}
-
-        completed++;
-        var pct = Math.min(100, (completed / totalSteps) * 100);
-        progressFill.style.width = pct.toFixed(1) + '%';
-        progressText.textContent = 'Processing: ' + source.name + ' - \u2018' + word + '\u2019 (' + completed + ' / ' + totalSteps + ')';
-
-        wordIdx++;
-        if (wordIdx >= words.length) {
-          wordIdx = 0;
-          sourceIdx++;
-        }
-        setTimeout(processNext, 0);
+    function proc() {
+      if (stopRequested) { finish(true); return; }
+      if (si >= sources.length) { finish(false); return; }
+      var src = sources[si];
+      var w = words[widx];
+      progressText.textContent = src.name + ' - \u2018' + w + '\u2019 (' + done + ' / ' + total + ')';
+      src.get(function(content) {
+        var pat = wholeWord ? '\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b' : w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        try { var rx = new RegExp(pat, flags), m, c = 0; while ((m = rx.exec(content)) !== null) { c++; if (m.index === rx.lastIndex) rx.lastIndex++; } results[w] += c; } catch(e) {}
+        done++;
+        progressFill.style.width = Math.min(100, done / total * 100).toFixed(1) + '%';
+        widx++; if (widx >= words.length) { widx = 0; si++; }
+        setTimeout(proc, 0);
       });
     }
 
     function finish(stopped) {
-      // Render results
       resultBody.innerHTML = '';
       for (var i = 0; i < words.length; i++) {
         var tr = document.createElement('tr');
-        var td1 = document.createElement('td');
-        td1.textContent = words[i];
-        var td2 = document.createElement('td');
-        td2.textContent = results[words[i]];
-        tr.appendChild(td1);
-        tr.appendChild(td2);
-        resultBody.appendChild(tr);
+        var td1 = document.createElement('td'); td1.textContent = words[i];
+        var td2 = document.createElement('td'); td2.textContent = results[words[i]];
+        tr.appendChild(td1); tr.appendChild(td2); resultBody.appendChild(tr);
       }
-      resultTable.style.display = '';
-      emptyState.style.display = 'none';
-
-      var label = stopped ? 'Stopped early' : 'Done';
-      progressText.textContent = label + ' \u2014 ' + words.length + ' words across ' + sources.length + ' sources';
-
-      btnFind.disabled = false;
-      btnStop.disabled = true;
-      btnExport.disabled = false;
+      resultTable.style.display = ''; emptyState.style.display = 'none';
+      progressText.textContent = (stopped ? 'Stopped' : 'Done') + ' \u2014 ' + words.length + ' words across ' + sources.length + ' sources';
+      btnFind.disabled = false; btnStop.disabled = true; btnExport.disabled = false;
     }
-
-    processNext();
+    proc();
   });
 
-  // Stop button
-  btnStop.addEventListener('click', function() {
-    stopRequested = true;
-  });
+  btnStop.addEventListener('click', function() { stopRequested = true; });
 
-  // Top Words button
   btnTopWords.addEventListener('click', function() {
-    if (files.length === 0) {
-      alert('Please add at least one file.');
-      return;
-    }
-
+    if (files.length === 0) { alert('Please add at least one file.'); return; }
     stopRequested = false;
-    btnFind.disabled = true;
-    btnTopWords.disabled = true;
-    btnStop.disabled = false;
-    btnExport.disabled = true;
-    progressWrap.classList.add('show');
-    progressFill.style.width = '0%';
-    progressText.textContent = 'Starting...';
-
+    btnFind.disabled = true; btnTopWords.disabled = true; btnStop.disabled = false; btnExport.disabled = true;
+    progressWrap.classList.add('show'); progressFill.style.width = '0%'; progressText.textContent = 'Starting...';
     var caseSensitive = chkCaseSensitive.checked;
     var topN = parseInt(numTopN.value, 10) || 20;
-    var wordPattern = /\b\w+\b/g;
+    var wp = /\b\w+\b/g;
     var freq = {};
-
-    // Build sources
     var sources = [];
     for (var fi = 0; fi < files.length; fi++) {
-      (function(f) {
-        sources.push({
-          name: f.name,
-          getContent: function(cb) {
-            var reader = new FileReader();
-            reader.onload = function(e) { cb(e.target.result); };
-            reader.onerror = function() { cb(''); };
-            reader.readAsText(f);
-          }
-        });
-      })(files[fi]);
+      (function(f) { sources.push({ name: f.name, get: function(cb) { var r = new FileReader(); r.onload = function(e) { cb(e.target.result); }; r.onerror = function() { cb(''); }; r.readAsText(f); } }); })(files[fi]);
     }
-    for (var ui = 0; ui < pasteEntries.length; ui++) {
-      (function(e) {
-        sources.push({
-          name: e.name,
-          getContent: function(cb) { cb(e.content); }
-        });
-      })(pasteEntries[ui]);
+    for (var ui = 0; ui < urlData.length; ui++) {
+      (function(e) { sources.push({ name: e.name, get: function(cb) { cb(e.content); } }); })(urlData[ui]);
     }
+    if (sources.length === 0) { alert('No sources to process.'); return; }
+    var si = 0;
 
-    if (sources.length === 0) {
-      alert('No sources to process.');
-      return;
-    }
-
-    var sourceIdx = 0;
-
-    function processNextSource() {
-      if (stopRequested) {
-        finish(true);
-        return;
-      }
-
-      if (sourceIdx >= sources.length) {
-        finish(false);
-        return;
-      }
-
-      var source = sources[sourceIdx];
-      progressText.textContent = 'Indexing: ' + source.name + ' (' + (sourceIdx + 1) + ' / ' + sources.length + ')';
-
-      source.getContent(function(content) {
-        var match;
-
-        if (caseSensitive) {
-          while ((match = wordPattern.exec(content)) !== null) {
-            processWord(match[0]);
-          }
-        } else {
-          while ((match = wordPattern.exec(content)) !== null) {
-            processWord(match[0].toLowerCase());
-          }
+    function proc() {
+      if (stopRequested) { finish(true); return; }
+      if (si >= sources.length) { finish(false); return; }
+      var src = sources[si];
+      progressText.textContent = src.name + ' (' + (si + 1) + '/' + sources.length + ')';
+      src.get(function(content) {
+        var m;
+        while ((m = wp.exec(content)) !== null) {
+          var w = caseSensitive ? m[0] : m[0].toLowerCase();
+          if (/\d/.test(w)) continue;
+          if (stopWords.has(w)) continue;
+          w = w.replace(/^(.+)'s$/, '$1');
+          if (w.indexOf("'") !== -1) continue;
+          if (w.length <= 1) continue;
+          freq[w] = (freq[w] || 0) + 1;
         }
-
-        sourceIdx++;
-        var pct = Math.min(100, (sourceIdx / sources.length) * 100);
-        progressFill.style.width = pct.toFixed(1) + '%';
-        setTimeout(processNextSource, 0);
+        si++;
+        progressFill.style.width = Math.min(100, si / sources.length * 100).toFixed(1) + '%';
+        setTimeout(proc, 0);
       });
-    }
-
-    function processWord(w) {
-      if (/\d/.test(w)) { return; }
-      if (stopWords.has(w)) { return; }
-      w = w.replace(/^(.+)'s$/, '$1');
-      if (w.indexOf("'") !== -1) { return; }
-      if (w.length <= 1) { return; }
-      freq[w] = (freq[w] || 0) + 1;
     }
 
     function finish(stopped) {
       var sorted = Object.keys(freq).map(function(k) { return { word: k, count: freq[k] }; });
       sorted.sort(function(a, b) { return b.count - a.count; });
       var top = sorted.slice(0, topN);
-
       resultBody.innerHTML = '';
       for (var i = 0; i < top.length; i++) {
         var tr = document.createElement('tr');
-        var td1 = document.createElement('td');
-        td1.textContent = top[i].word;
-        var td2 = document.createElement('td');
-        td2.textContent = top[i].count;
-        tr.appendChild(td1);
-        tr.appendChild(td2);
-        resultBody.appendChild(tr);
+        var td1 = document.createElement('td'); td1.textContent = top[i].word;
+        var td2 = document.createElement('td'); td2.textContent = top[i].count;
+        tr.appendChild(td1); tr.appendChild(td2); resultBody.appendChild(tr);
       }
-      resultTable.style.display = '';
-      emptyState.style.display = 'none';
-
-      var label = stopped ? 'Stopped early' : 'Done';
-      progressText.textContent = label + ' \u2014 top ' + topN + ' of ' + Object.keys(freq).length + ' unique words across ' + sources.length + ' sources';
-
-      btnFind.disabled = false;
-      btnTopWords.disabled = false;
-      btnStop.disabled = true;
-      btnExport.disabled = false;
+      resultTable.style.display = ''; emptyState.style.display = 'none';
+      progressText.textContent = (stopped ? 'Stopped' : 'Done') + ' \u2014 top ' + topN + ' of ' + Object.keys(freq).length + ' unique words across ' + sources.length + ' sources';
+      btnFind.disabled = false; btnTopWords.disabled = false; btnStop.disabled = true; btnExport.disabled = false;
     }
-
-    processNextSource();
+    proc();
   });
 
-  // Export CSV
   btnExport.addEventListener('click', function() {
     var rows = resultBody.querySelectorAll('tr');
-    if (rows.length === 0) {
-      alert('No results to export.');
-      return;
-    }
+    if (rows.length === 0) { alert('No results to export.'); return; }
     var csv = 'word,freq\n';
     for (var i = 0; i < rows.length; i++) {
       var cells = rows[i].querySelectorAll('td');
-      if (cells.length >= 2) {
-        var w = cells[0].textContent;
-        var f = cells[1].textContent;
-        csv += w + ',' + f + '\n';
-      }
+      if (cells.length >= 2) csv += cells[0].textContent + ',' + cells[1].textContent + '\n';
     }
-    download(csv, 'word_frequencies.csv', 'text/csv');
+    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    var u = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = u; a.download = 'word_frequencies.csv'; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(u); }, 1000);
   });
-
-  function download(content, filename, mime) {
-    var bom = '\uFEFF';
-    var blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 1000);
-  }
 
 })();
 </script>
