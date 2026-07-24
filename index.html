@@ -321,57 +321,27 @@ tr:last-child td { border-bottom: none; }
       // Try 4chan API
       var chanM = url.match(/^https?:\/\/(?:boards|a)\.4(?:chan|cdn)\.org\/(\w+)\/thread\/(\d+)/);
       if (chanM) {
-        var chanBoard = chanM[1];
-        var chanThread = chanM[2];
-        var chanApi = 'https://a.4cdn.org/' + chanBoard + '/thread/' + chanThread + '.json';
-
-        fetch(chanApi)
-          .then(function(resp) {
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            return resp.json();
-          })
+        var chanApi = 'https://a.4cdn.org/' + chanM[1] + '/thread/' + chanM[2] + '.json';
+        timedFetch(chanApi, 15000)
+          .then(function(r) { return r.json(); })
           .then(function(obj) {
             var text = '';
             for (var i = 0; i < obj.posts.length; i++) {
-              var p = obj.posts[i];
-              if (p.com) text += stripHtml(p.com) + '\n';
+              if (obj.posts[i].com) text += stripHtml(obj.posts[i].com) + '\n';
             }
-            if (text.trim()) {
-              pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
-            }
+            if (text.trim()) pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
             idx++;
             setTimeout(fetchNext, 0);
           })
-          .catch(function() {
-            // Direct failed, try proxy
-            var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(chanApi);
-            fetch(proxyUrl)
-              .then(function(resp) {
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                return resp.json();
-              })
-              .then(function(obj) {
-                var text = '';
-                for (var i = 0; i < obj.posts.length; i++) {
-                  var p = obj.posts[i];
-                  if (p.com) text += stripHtml(p.com) + '\n';
-                }
-                if (text.trim()) {
-                  pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
-                }
-                idx++;
-                setTimeout(fetchNext, 0);
-              })
-              .catch(function(err) {
-                alert('Failed to fetch: ' + url + '\n' + err.message);
-                idx++;
-                setTimeout(fetchNext, 0);
-              });
+          .catch(function(e) {
+            alert('Failed to fetch: ' + url + '\n' + e.message);
+            idx++;
+            setTimeout(fetchNext, 0);
           });
         return;
       }
 
-      // Try FoolFuuka API: https?://<host>/<board>/thread/<num>
+      // Try FoolFuuka API
       var m = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
       if (!m) {
         alert('Could not fetch: ' + url);
@@ -380,32 +350,24 @@ tr:last-child td { border-bottom: none; }
         return;
       }
 
-      var apiHost = m[1];
-      var apiBoard = m[2];
-      var apiThread = m[3];
-      var apiUrl = 'https://' + apiHost + '/_/api/chan/thread/?board=' + apiBoard + '&num=' + apiThread;
-
-      fetch(apiUrl)
-        .then(function(resp) {
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          return resp.json();
-        })
+      var apiUrl = 'https://' + m[1] + '/_/api/chan/thread/?board=' + m[2] + '&num=' + m[3];
+      timedFetch(apiUrl, 15000)
+        .then(function(r) { return r.json(); })
         .then(function(obj) { onFetchDone(obj, url); })
-        .catch(function() {
-          // Direct fetch failed (CORS/blocked), try proxy
-          var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(apiUrl);
-          fetch(proxyUrl)
-            .then(function(resp) {
-              if (!resp.ok) throw new Error('HTTP ' + resp.status);
-              return resp.json();
-            })
-            .then(function(obj) { onFetchDone(obj, url); })
-            .catch(function(err2) {
-              alert('Failed to fetch: ' + url + '\n' + err2.message);
-              idx++;
-              setTimeout(fetchNext, 0);
-            });
+        .catch(function(e) {
+          alert('Failed to fetch: ' + url + '\n' + e.message);
+          idx++;
+          setTimeout(fetchNext, 0);
         });
+    }
+
+    function timedFetch(url, ms) {
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var opts = ctrl ? { signal: ctrl.signal } : {};
+      if (ctrl) {
+        setTimeout(function() { ctrl.abort(); }, ms);
+      }
+      return fetch(url, opts);
     }
 
     function onFetchDone(obj, url) {
