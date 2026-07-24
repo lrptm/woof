@@ -64,8 +64,13 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="section">
-  <div class="section-title">Words (one per line)</div>
-  <textarea class="words-area" id="wordsInput" spellcheck="false"></textarea>
+  <div class="section-title" style="display:flex; align-items:center; gap:8px">
+    <span>Words (one per line)</span>
+    <label style="font-size:12px; font-weight:400; display:flex; align-items:center; gap:3px; cursor:pointer">
+      <input type="checkbox" id="chkCustomWords"> Custom words
+    </label>
+  </div>
+  <textarea class="words-area" id="wordsInput" spellcheck="false" disabled style="background:#f0f0f0; color:#999"></textarea>
 </div>
 
 <div class="section">
@@ -150,6 +155,7 @@ tr:last-child td { border-bottom: none; }
   var wordsInput = document.getElementById('wordsInput');
   var chkWholeWord = document.getElementById('chkWholeWord');
   var chkCaseSensitive = document.getElementById('chkCaseSensitive');
+  var chkCustomWords = document.getElementById('chkCustomWords');
   var btnFind = document.getElementById('btnFind');
   var btnStop = document.getElementById('btnStop');
   var btnExport = document.getElementById('btnExport');
@@ -249,10 +255,28 @@ tr:last-child td { border-bottom: none; }
     renderFiles();
   });
 
+  // Custom words checkbox toggle
+  chkCustomWords.addEventListener('change', function() {
+    if (chkCustomWords.checked) {
+      wordsInput.disabled = false;
+      wordsInput.style.background = '#fff';
+      wordsInput.style.color = '#333';
+    } else {
+      wordsInput.disabled = true;
+      wordsInput.style.background = '#f0f0f0';
+      wordsInput.style.color = '#999';
+    }
+  });
+
   // Find button
   btnFind.addEventListener('click', function() {
     if (files.length === 0) {
       alert('Please add at least one file.');
+      return;
+    }
+
+    if (!chkCustomWords.checked) {
+      alert("Check 'Custom words' to enter words for Find.");
       return;
     }
 
