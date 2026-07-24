@@ -318,6 +318,38 @@ tr:last-child td { border-bottom: none; }
         }
       }
 
+      // Try 4chan API
+      var chanM = url.match(/^https?:\/\/(?:boards|a)\.4(?:chan|cdn)\.org\/(\w+)\/thread\/(\d+)/);
+      if (chanM) {
+        var chanBoard = chanM[1];
+        var chanThread = chanM[2];
+        var chanApi = 'https://a.4cdn.org/' + chanBoard + '/thread/' + chanThread + '.json';
+
+        fetch(chanApi)
+          .then(function(resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.json();
+          })
+          .then(function(obj) {
+            var text = '';
+            for (var i = 0; i < obj.posts.length; i++) {
+              var p = obj.posts[i];
+              if (p.com) text += stripHtml(p.com) + '\n';
+            }
+            if (text.trim()) {
+              pasteEntries.push({ name: '\uD83C\uDF10 ' + url, content: text });
+            }
+            idx++;
+            setTimeout(fetchNext, 0);
+          })
+          .catch(function(err) {
+            alert('Failed to fetch: ' + url + '\n' + err.message);
+            idx++;
+            setTimeout(fetchNext, 0);
+          });
+        return;
+      }
+
       // Try FoolFuuka API: https?://<host>/<board>/thread/<num>
       var m = url.match(/^https?:\/\/([^/]+)\/(\w+)\/thread\/(\d+)/);
       if (!m) {
